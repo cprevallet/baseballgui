@@ -21,10 +21,6 @@ package main
 import (
 	"fmt"
 	"github.com/cprevallet/baseballgui/trajectory"
-	"github.com/gotk3/gotk3/gtk"
-	"log"
-	"strconv"
-
         "github.com/faiface/pixel"
         "github.com/faiface/pixel/imdraw"
         "github.com/faiface/pixel/pixelgl"
@@ -32,66 +28,7 @@ import (
 
 )
 
-var history []trajectory.TrajectoryPoint
-
-func main() {
-	gtk.Init(nil)
-
-	win, err := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
-	if err != nil {
-		log.Fatal("Unable to create window:", err)
-	}
-	win.Connect("destroy", func() {
-		gtk.MainQuit()
-	})
-
-	win.Add(windowWidget())
-	win.ShowAll()
-
-	gtk.Main()
-}
-
-func windowWidget() *gtk.Widget {
-	grid, err := gtk.GridNew()
-	if err != nil {
-		log.Fatal("Unable to create grid:", err)
-	}
-	grid.SetOrientation(gtk.ORIENTATION_VERTICAL)
-
-	inputs := []*gtk.Entry{}
-	//labels := []*gtk.Entry{}
-
-	for i := 0; i < 3; i++ {
-		entry, err := gtk.EntryNew()
-		if err != nil {
-			log.Fatal("Unable to create entry:", err)
-		}
-		inputs = append(inputs, entry)
-		grid.Add(inputs[i])
-		inputs[i].SetHExpand(true)
-	}
-
-	calcbtn, err := gtk.ButtonNewWithLabel("Calculate")
-	grid.Add(calcbtn)
-
-	calcbtn.Connect("clicked", func() {
-		// pull the arguments out of the widgets as float64
-		var args []float64
-		for i := 0; i < 3; i++ {
-			v, _ := inputs[i].GetText()
-			if a, err := strconv.ParseFloat(v, 64); err == nil {
-				args = append(args, a)
-			}
-		}
-		if len(args) == 3 {
-			doCalc(args[0], args[1], args[2])
-		}
-	})
-
-	return &grid.Container.Widget
-}
-
-func doCalc(initialAltitude float64, initialAngle float64, initialVelocity float64) {
+func doCalc(initialAltitude float64, initialAngle float64, initialVelocity float64) (history []trajectory.TrajectoryPoint) {
 	//fmt.Println("Baseball trajectory from Public Domain Aeronautical Software. Go version")
 	var dt = 0.1          // time step
 	var normalized = true //make initial altitude the reference point in results
@@ -119,7 +56,7 @@ func doCalc(initialAltitude float64, initialAngle float64, initialVelocity float
 			history[k].Acceleration[1])
 	}
 	fmt.Println("End of Baseball")
-        pixelgl.Run(run)
+        return history
 }
 
 func run() {
@@ -135,19 +72,59 @@ func run() {
 
         imd := imdraw.New(nil)
         inc := 0
+	
+        var Altitude float64 = 1609.0 //meters
+        var Angle float64 = 40.0  // degrees from horizontal
+        //var Velocity float64 = 35.0 // m/s
+        var Velocity float64 = 100.0 // m/s
+        
+	trj := doCalc(Altitude, Angle, Velocity)
+        var newtrj []trajectory.TrajectoryPoint
 
         for !win.Closed() {
-                if inc > len(history)-1 {
-                        inc = 0
-                }
                 win.Clear(colornames.Blue)
                 imd.Clear()
                 imd.Color = colornames.Limegreen
-                imd.Push(pixel.V(history[inc].Position[0], history[inc].Position[1]))
+                imd.Push(pixel.V(trj[inc].Position[0], trj[inc].Position[1]))
                 imd.Circle(5, 0)
                 imd.Draw(win)
                 win.Update()
                 inc++
+                if inc > len(trj)-1 {
+                        inc = 0
+                        if newtrj != nil {
+                           trj = nil
+                           trj = newtrj
+                           newtrj = nil
+                        }
+
+                }
+
+                if win.Pressed(pixelgl.KeyRight) {
+			Velocity += 1.0
+	                newtrj = doCalc(Altitude, Angle, Velocity)
+		}
+
+                if win.Pressed(pixelgl.KeyLeft) {
+			Velocity -= 1.0
+	                newtrj = doCalc(Altitude, Angle, Velocity)
+		}
+
+                if win.Pressed(pixelgl.KeyUp) {
+			Angle += 1.0
+	                newtrj = doCalc(Altitude, Angle, Velocity)
+		}
+
+                if win.Pressed(pixelgl.KeyDown) {
+			Angle -= 1.0
+	                newtrj = doCalc(Altitude, Angle, Velocity)
+		}
+
         }
+}
+
+
+func main() {
+        pixelgl.Run(run)
 }
 
