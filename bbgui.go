@@ -20,6 +20,7 @@ package main
 
 import (
 	"fmt"
+        "math"
 	"github.com/cprevallet/baseballgui/trajectory"
         "github.com/faiface/pixel"
         "github.com/faiface/pixel/imdraw"
@@ -84,6 +85,22 @@ func run() {
         for !win.Closed() {
                 win.Clear(colornames.Blue)
                 imd.Clear()
+                // Draw a crosshair
+                imd.Color = colornames.Limegreen
+                imd.Push(pixel.V(0.0, 0.0))
+                length := 20.0
+                launcherX := length * math.Cos(Angle*math.Pi/180.0)
+                launcherY := length * math.Sin(Angle*math.Pi/180.0)
+                power := Velocity / 5.0
+                imd.Push(pixel.V(launcherX, launcherY))
+                imd.Line(5.0)
+                // Draw power graph
+                imd.Color = colornames.Red
+                offset := 10.0
+                imd.Push(pixel.V(launcherX + offset, launcherY + offset))
+                imd.Push(pixel.V(launcherX + offset + power, launcherY + offset))
+                imd.Line(1.0)
+                // Draw the trajectory
                 imd.Color = colornames.Limegreen
                 imd.Push(pixel.V(trj[inc].Position[0], trj[inc].Position[1]))
                 imd.Circle(5, 0)
@@ -99,7 +116,7 @@ func run() {
                         }
 
                 }
-
+                // Accept keyboard input and update the trajectory.
                 if win.Pressed(pixelgl.KeyRight) {
 			Velocity += 1.0
 	                newtrj = doCalc(Altitude, Angle, Velocity)
