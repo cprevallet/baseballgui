@@ -21,6 +21,11 @@ package main
 import (
 	"fmt"
         "math"
+        
+        "image"
+	"os"
+        _ "image/png"
+
 	"github.com/cprevallet/baseballgui/trajectory"
         "github.com/faiface/pixel"
         "github.com/faiface/pixel/imdraw"
@@ -28,6 +33,19 @@ import (
         "golang.org/x/image/colornames"
 
 )
+
+func loadPicture(path string) (pixel.Picture, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+	return pixel.PictureDataFromImage(img), nil
+}
 
 func doCalc(initialAltitude float64, initialAngle float64, initialVelocity float64) (history []trajectory.TrajectoryPoint) {
 	//fmt.Println("Baseball trajectory from Public Domain Aeronautical Software. Go version")
@@ -61,8 +79,9 @@ func doCalc(initialAltitude float64, initialAngle float64, initialVelocity float
 }
 
 func run() {
+        // One-time initialization section
         cfg := pixelgl.WindowConfig{
-                Title:  "Baseball trajectory visualization.",
+                Title:  "Cannonball trajectory visualization.",
                 Bounds: pixel.R(0, 0, 1024, 768),
                 VSync:  true,
         }
@@ -77,33 +96,49 @@ func run() {
         var Altitude float64 = 1609.0 //meters
         var Angle float64 = 40.0  // degrees from horizontal
         //var Velocity float64 = 35.0 // m/s
-        var Velocity float64 = 100.0 // m/s
+        // this isn't historically accurate, but useful to keep it within the screen resolution
+        var Velocity float64 = 100.0 // m/s 
         
 	trj := doCalc(Altitude, Angle, Velocity)
         var newtrj []trajectory.TrajectoryPoint
 
+        pic, err := loadPicture("cannonball.png")
+	if err != nil {
+		panic(err)
+        }
+        cannonball := pixel.NewSprite(pic, pic.Bounds())
+        pic2, err := loadPicture("cannon.png")
+	if err != nil {
+		panic(err)
+        }
+        cannon := pixel.NewSprite(pic2, pic2.Bounds())
+
         for !win.Closed() {
                 win.Clear(colornames.Blue)
                 imd.Clear()
-                // Draw a crosshair
-                imd.Color = colornames.Limegreen
-                imd.Push(pixel.V(0.0, 0.0))
-                length := 20.0
-                launcherX := length * math.Cos(Angle*math.Pi/180.0)
-                launcherY := length * math.Sin(Angle*math.Pi/180.0)
-                power := Velocity / 5.0
-                imd.Push(pixel.V(launcherX, launcherY))
-                imd.Line(5.0)
+
+                // Draw a cannonball sprite
+        	mat := pixel.IM
+        	mat = mat.Scaled(pixel.ZV, 0.1 )
+        	mat = mat.Moved(pixel.V(trj[inc].Position[0], trj[inc].Position[1]))
+                cannonball.Draw(win, mat)
+
+                // Draw a cannon sprite
+        	mat = pixel.IM
+        	mat = mat.Scaled(pixel.ZV, 0.2 )
+        	mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
+                cannon.Draw(win, mat)
+
                 // Draw power graph
+                launcherX := 40.0
+                launcherY := 40.0
+                power := Velocity / 5.0
                 imd.Color = colornames.Red
                 offset := 10.0
                 imd.Push(pixel.V(launcherX + offset, launcherY + offset))
                 imd.Push(pixel.V(launcherX + offset + power, launcherY + offset))
                 imd.Line(1.0)
                 // Draw the trajectory
-                imd.Color = colornames.Limegreen
-                imd.Push(pixel.V(trj[inc].Position[0], trj[inc].Position[1]))
-                imd.Circle(5, 0)
                 imd.Draw(win)
                 win.Update()
                 inc++

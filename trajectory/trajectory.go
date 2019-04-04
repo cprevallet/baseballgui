@@ -25,8 +25,15 @@ var rhozero = 1.2250    // density of air at sealevel, kg/cu.m
 // baseball must be no less than 5.00 ounces and no more than 5.25 ounces.
 // I assume my ideal ball lies exactly in the middle.
 // In SI units:
+/*
 var diam = (9.125 / (12 * math.Pi)) * ft2meters // diameter of a baseball (m)
 var mass = (5.125 / 16) * lbs2kg                // mass of a baseball (kg)
+var sref = 0.25 * math.Pi * diam * diam         // frontal area (sq.m)
+*/
+// British cannonballs in SI units.
+// https://hypertextbook.com/facts/2009/JenniferChung.shtml
+var diam =  4.95 / 12 * ft2meters               // diameter of a cannonball (m)
+var mass = 5.4                                  // mass of a cannonball (kg)
 var sref = 0.25 * math.Pi * diam * diam         // frontal area (sq.m)
 
 // accel computes the acceleration (vector) for a spherical projectile
