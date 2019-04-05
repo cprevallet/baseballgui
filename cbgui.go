@@ -19,7 +19,7 @@
 package main
 
 import (
-	"fmt"
+//	"fmt"
 	"image"
 	_ "image/png"
 	"math"
@@ -85,7 +85,6 @@ func initProjectile(
 func updateProjectile(prj *Projectile, dt float64) {
         // Update the matrix to move the sprite on the screen.
         newTrajectory := trajectory.UpdateRK4(prj.Trj, dt)
-        fmt.Println(prj.Trj.Position[0], prj.Trj.Position[1])
         // What's the change?
         newVec := pixel.V(newTrajectory.Position[0] - prj.Trj.Position[0],
                 newTrajectory.Position[1] - prj.Trj.Position[1])
@@ -143,10 +142,10 @@ func run() {
                     inFlight[i].Spr.Draw(win, inFlight[i].Mat)
                     if inFlight[i].Trj.Position[1] > 0.0 { keepProj = append(keepProj, inFlight[i]) }
                 }
+                // Remove elements that have left the screen.
                 inFlight = nil
                 inFlight = keepProj
                 keepProj = nil
-                fmt.Println(len(inFlight))
 
 		// Draw a cannon sprite
                 mat := pixel.IM
