@@ -19,12 +19,16 @@
 package main
 
 import (
-	"fmt"
-	"math"
-
+//	"fmt"
 	"image"
 	_ "image/png"
+	"math"
+        "time"
 	"os"
+        "log"
+
+        "runtime/pprof"
+        "flag"
 
 	"github.com/cprevallet/baseballgui/trajectory"
 	"github.com/faiface/pixel"
@@ -32,6 +36,13 @@ import (
 	"github.com/faiface/pixel/pixelgl"
 	"golang.org/x/image/colornames"
 )
+
+var timefactor = 10.0 //projectile update time is a multiple of the frame rate, depends on cpu speed
+
+type Projectile struct {
+        Trj      trajectory.TrajectoryPoint // what's our position, velocity, and acceleration in time
+        Spr     *pixel.Sprite               // drawable frame of a Picture
+}
 
 func loadPicture(path string) (pixel.Picture, error) {
 	file, err := os.Open(path)
@@ -46,35 +57,33 @@ func loadPicture(path string) (pixel.Picture, error) {
 	return pixel.PictureDataFromImage(img), nil
 }
 
-func doCalc(initialAltitude float64, initialAngle float64, initialVelocity float64) (history []trajectory.TrajectoryPoint) {
-	//fmt.Println("Baseball trajectory from Public Domain Aeronautical Software. Go version")
-	var dt = 0.1          // time step
-	var normalized = true //make initial altitude the reference point in results
-	var k = 0
-	// Instructions for use of this program: put your values for the three
-	//  initial conditions on the next three lines. Recompile. Run bb.
-	// Hints: Denver=1609  Mexico City=2420  La Paz=3650  Everest=8850
-	/*
-	   initialAltitude := 1609.0 // meters
-	   initialAngle := 40.0      // degrees from horizontal
-	   initialVelocity := 35.0   // m/s
-	*/
+// InitProjectile provides starting values for a projectile.
+func initProjectile(
+                initialAltitude float64, // meters 
+                initialAngle float64,    // degrees from horizontal
+                initialVelocity float64, // m/s
+                pic pixel.Picture,      // sprite image filename
+        ) (projectile Projectile) {
 
-	//fmt.Println("      t           x           y          vx           vy          ax         ay")
-	history = trajectory.Trajectory(initialAltitude, initialVelocity,
-		initialAngle, dt, normalized)
-	for k = 0; k < len(history); k++ {
-		fmt.Printf("%9.2f %11.2f %11.2f %11.2f %11.2f %11.2f %11.2f \n",
-			history[k].Time,
-			history[k].Position[0],
-			history[k].Position[1],
-			history[k].Velocity[0],
-			history[k].Velocity[1],
-			history[k].Acceleration[0],
-			history[k].Acceleration[1])
-	}
-	fmt.Println("End of Baseball")
-	return history
+        //  Create the initial trajectory based on the angle of the object projecting it.
+        position := [2]float64{0.0, initialAltitude}
+        velocity := [2]float64{initialVelocity * math.Cos(initialAngle*math.Pi/180.0),
+                initialVelocity * math.Sin(initialAngle*math.Pi/180.0)}
+        acceleration := trajectory.Accel(0.0, position, velocity)
+        trj := trajectory.TrajectoryPoint{Time: 0.0, Position: position,
+            Velocity: velocity, Acceleration: acceleration}
+
+        //  Create the drawable sprite 
+        sprite := pixel.NewSprite(pic, pic.Bounds())
+        projectile = Projectile{trj,sprite}
+        return projectile
+}
+
+// UpdateProjectile computes a trajectory, performing numerical solution of a set of
+// ordinary differential equations with a fixed time step.
+func updateProjectile(prj *Projectile, dt float64) {
+        newTrajectory := trajectory.UpdateRK4(prj.Trj, dt)
+        prj.Trj = newTrajectory
 }
 
 func run() {
@@ -90,40 +99,56 @@ func run() {
 	}
 
 	imd := imdraw.New(nil)
-	inc := 0
+	// inc := 0
 
-	var Altitude float64 = 1609.0 //meters
+	var Altitude float64 = 0.0 //meters
 	var Angle float64 = 40.0      // degrees from horizontal
 	//var Velocity float64 = 35.0 // m/s
 	// this isn't historically accurate, but useful to keep it within the screen resolution
-	var Velocity float64 = 100.0 // m/s
+	var Velocity float64 = 55.0 // m/s
 
-	var trj []trajectory.TrajectoryPoint
-	var newtrj []trajectory.TrajectoryPoint
+	// var trj []trajectory.TrajectoryPoint
+	// var newtrj []trajectory.TrajectoryPoint
 
 	pic, err := loadPicture("cannonball.png")
 	if err != nil {
 		panic(err)
 	}
-	cannonball := pixel.NewSprite(pic, pic.Bounds())
+	// cannonball := pixel.NewSprite(pic, pic.Bounds())
+
+        // Initialize our cannonball.
+        cball := initProjectile(
+                Altitude,
+                Angle,
+                Velocity,
+                pic)
+
 	pic2, err := loadPicture("cannon.png")
 	if err != nil {
 		panic(err)
 	}
 	cannon := pixel.NewSprite(pic2, pic2.Bounds())
 
-	for !win.Closed() {
+        last := time.Now() //time of the start of the previous frame
 
+	for !win.Closed() {
+		dt := time.Since(last).Seconds()
+		last = time.Now()
 		win.Clear(colornames.Blue)
 		imd.Clear()
 
 		// Draw a cannonball sprite
 		mat := pixel.IM
+                /*
 		if (trj != nil) && (inc < len(trj)) {
-			mat = mat.Scaled(pixel.ZV, 0.1)
-			mat = mat.Moved(pixel.V(trj[inc].Position[0], trj[inc].Position[1]))
 			cannonball.Draw(win, mat)
 		}
+                */
+                updateProjectile(&cball, dt*timefactor)
+                mat = mat.Scaled(pixel.ZV, 0.1)
+                //fmt.Println(cball.Trj.Position)
+                mat = mat.Moved(pixel.V(cball.Trj.Position[0], cball.Trj.Position[1]))
+                cball.Spr.Draw(win, mat)
 
 		// Draw a cannon sprite
 		mat = pixel.IM
@@ -143,8 +168,8 @@ func run() {
 		// Draw the trajectory
 		imd.Draw(win)
 		win.Update()
-
 		// Update the current position of the cannonball.
+                /*
 		if (trj != nil) && (inc < len(trj)) {
 			inc++
 		}
@@ -156,11 +181,15 @@ func run() {
 		if (newtrj != nil) && (trj == nil) {
 			trj = newtrj
 		}
+                */
 
 		// Accept keyboard input and calculate a new trajectory.
 
 		if win.Pressed(pixelgl.KeySpace) {
+                        /*
 			newtrj = doCalc(Altitude, Angle, Velocity)
+                        */
+
 		}
 
 		if win.Pressed(pixelgl.KeyRight) {
@@ -182,6 +211,17 @@ func run() {
 	}
 }
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
+    flag.Parse()
+    if *cpuprofile != "" {
+        f, err := os.Create(*cpuprofile)
+        if err != nil {
+            log.Fatal(err)
+        }
+        pprof.StartCPUProfile(f)
+        defer pprof.StopCPUProfile()
+    }
 	pixelgl.Run(run)
 }

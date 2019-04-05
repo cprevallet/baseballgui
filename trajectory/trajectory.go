@@ -3,7 +3,7 @@
 package trajectory
 
 import (
-	//"fmt"
+//	"fmt"
 	"math"
 )
 
@@ -36,17 +36,18 @@ var diam =  4.95 / 12 * ft2meters               // diameter of a cannonball (m)
 var mass = 5.4                                  // mass of a cannonball (kg)
 var sref = 0.25 * math.Pi * diam * diam         // frontal area (sq.m)
 
-// accel computes the acceleration (vector) for a spherical projectile
+// Accel computes the acceleration (vector) for a spherical projectile
 // moving through a viscous medium. Assume Mach number is small enough
 // that wave drag may be neglected. Ignore added mass term.
 // NOTE - position has units of meters, but first argument to simpleAtmosphere
 //   is in kilometers. Be sure to remember to multiply by 0.001
-func accel(time float64, position [2]float64, velocity [2]float64) (acceleration [2]float64) {
+func Accel(time float64, position [2]float64, velocity [2]float64) (acceleration [2]float64) {
 	vertical := [2]float64{0.0, 1.0}
 	var drag, unitVelocity [2]float64
 	vsq := 0.0
 	for _, v := range velocity {
-		vsq += math.Pow(v, 2.0)
+		//vsq += math.Pow(v, 2.0)
+		vsq += v*v
 	}
 	vmag := math.Sqrt(vsq)
 	for i, v := range velocity {
@@ -138,7 +139,7 @@ func simpleAtmosphere(alt float64) (sigma float64, delta float64, theta float64)
 	return
 }
 
-//  baseballKutta advances one time-like step in a trajectory. This is a system
+//  UpdateRK4 advances one time-like step in a trajectory. This is a system
 //  of four first order ordinary differential equations. Use fourth-order
 //  Runge-Kutta equation to advance one time step.
 //  p1 = current position
@@ -146,7 +147,7 @@ func simpleAtmosphere(alt float64) (sigma float64, delta float64, theta float64)
 //  p2 = next position
 //  Ref:
 //  https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#The_Runge%E2%80%93Kutta_method
-func baseballKutta(p1 TrajectoryPoint, h float64) (p2 TrajectoryPoint) {
+func UpdateRK4(p1 TrajectoryPoint, h float64) (p2 TrajectoryPoint) {
 	var dx1, dx2, dx3, dx4 [2]float64
 	var dv1, dv2, dv3, dv4 [2]float64
 
@@ -154,7 +155,7 @@ func baseballKutta(p1 TrajectoryPoint, h float64) (p2 TrajectoryPoint) {
 	t := p1.Time
 	x := p1.Position
 	v := p1.Velocity
-	a := accel(t, x, v)
+	a := Accel(t, x, v)
 	for i := 0; i < 2; i++ {
 		dx1[i] = h * v[i]
 		dv1[i] = h * a[i]
@@ -166,7 +167,7 @@ func baseballKutta(p1 TrajectoryPoint, h float64) (p2 TrajectoryPoint) {
 		x2[i] = x[i] + dx1[i]/2.0
 		v2[i] = v[i] + dv1[i]/2.0
 	}
-	a = accel(t+h/2.0, x2, v2)
+	a = Accel(t+h/2.0, x2, v2)
 	for i := 0; i < 2; i++ {
 		dx2[i] = h * (v[i] + dv1[i]/2.0)
 		dv2[i] = h * a[i]
@@ -178,7 +179,7 @@ func baseballKutta(p1 TrajectoryPoint, h float64) (p2 TrajectoryPoint) {
 		x3[i] = x[i] + dx2[i]/2.0
 		v3[i] = v[i] + dv2[i]/2.0
 	}
-	a = accel(t+h/2.0, x3, v3)
+	a = Accel(t+h/2.0, x3, v3)
 	for i := 0; i < 2; i++ {
 		dx3[i] = h * (v[i] + dv2[i]/2.0)
 		dv3[i] = h * a[i]
@@ -190,7 +191,7 @@ func baseballKutta(p1 TrajectoryPoint, h float64) (p2 TrajectoryPoint) {
 		x4[i] = x[i] + dx3[i]
 		v4[i] = v[i] + dv3[i]
 	}
-	a = accel(t+h, x4, v4)
+	a = Accel(t+h, x4, v4)
 	for i := 0; i < 2; i++ {
 		dx4[i] = h * (v[i] + dv3[i])
 		dv4[i] = h * a[i]
@@ -201,7 +202,7 @@ func baseballKutta(p1 TrajectoryPoint, h float64) (p2 TrajectoryPoint) {
 		p2.Position[i] = p1.Position[i] + (dx1[i]+dx2[i]+dx2[i]+dx3[i]+dx3[i]+dx4[i])/6.0
 		p2.Velocity[i] = p1.Velocity[i] + (dv1[i]+dv2[i]+dv2[i]+dv3[i]+dv3[i]+dv4[i])/6.0
 	}
-	p2.Acceleration = accel(p2.Time, p2.Position, p2.Velocity)
+	p2.Acceleration = Accel(p2.Time, p2.Position, p2.Velocity)
 	return
 }
 
@@ -219,7 +220,7 @@ func Trajectory(initialAltitude float64, initialVelocity float64, initialTheta f
 	position := [2]float64{0.0, initialAltitude}
 	velocity := [2]float64{initialVelocity * math.Cos(initialTheta*math.Pi/180.0),
 		initialVelocity * math.Sin(initialTheta*math.Pi/180.0)}
-	acceleration := accel(t, position, velocity)
+	acceleration := Accel(t, position, velocity)
 	initialTrajectory := TrajectoryPoint{Time: t, Position: position,
             Velocity: velocity, Acceleration: acceleration}
 	history = append(history, initialTrajectory)
@@ -227,7 +228,7 @@ func Trajectory(initialAltitude float64, initialVelocity float64, initialTheta f
 	k := 0
 	cond := true
 	for ok := true; ok; ok = cond {
-		newTrajectory := baseballKutta(history[k], dt)
+		newTrajectory := UpdateRK4(history[k], dt)
 		k++
 		history = append(history, newTrajectory)
 		cond = (newTrajectory.Position[1] > initialAltitude)
