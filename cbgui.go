@@ -19,16 +19,12 @@
 package main
 
 import (
-//	"fmt"
+	"fmt"
 	"image"
 	_ "image/png"
 	"math"
         "time"
 	"os"
-        "log"
-
-        "runtime/pprof"
-        "flag"
 
 	"github.com/cprevallet/baseballgui/trajectory"
 	"github.com/faiface/pixel"
@@ -37,11 +33,11 @@ import (
 	"golang.org/x/image/colornames"
 )
 
-var timefactor = 10.0 //projectile update time is a multiple of the frame rate, depends on cpu speed
-
+var speedFactor = 8.0 // Increasing this speeds up the trajectory display.
 type Projectile struct {
         Trj      trajectory.TrajectoryPoint // what's our position, velocity, and acceleration in time
         Spr     *pixel.Sprite               // drawable frame of a Picture
+        Mat     pixel.Matrix                // linear transformation for movement, rotation, etc.
 }
 
 func loadPicture(path string) (pixel.Picture, error) {
@@ -75,16 +71,29 @@ func initProjectile(
 
         //  Create the drawable sprite 
         sprite := pixel.NewSprite(pic, pic.Bounds())
-        projectile = Projectile{trj,sprite}
+
+        // Start with the identity matrix and scale based on the picture.
+        mat := pixel.IM
+        mat = mat.Scaled(pixel.ZV, 0.1)
+        projectile = Projectile{trj,sprite, mat}
+
         return projectile
 }
 
 // UpdateProjectile computes a trajectory, performing numerical solution of a set of
 // ordinary differential equations with a fixed time step.
 func updateProjectile(prj *Projectile, dt float64) {
+        // Update the matrix to move the sprite on the screen.
         newTrajectory := trajectory.UpdateRK4(prj.Trj, dt)
+        fmt.Println(prj.Trj.Position[0], prj.Trj.Position[1])
+        // What's the change?
+        newVec := pixel.V(newTrajectory.Position[0] - prj.Trj.Position[0],
+                newTrajectory.Position[1] - prj.Trj.Position[1])
+        // Update the moved matrix.
+        prj.Mat = prj.Mat.Moved(newVec)
         prj.Trj = newTrajectory
 }
+
 
 func run() {
 	// One-time initialization section
@@ -105,23 +114,12 @@ func run() {
 	var Angle float64 = 40.0      // degrees from horizontal
 	//var Velocity float64 = 35.0 // m/s
 	// this isn't historically accurate, but useful to keep it within the screen resolution
-	var Velocity float64 = 55.0 // m/s
-
-	// var trj []trajectory.TrajectoryPoint
-	// var newtrj []trajectory.TrajectoryPoint
+	var Velocity float64 = 100.0 // m/s
 
 	pic, err := loadPicture("cannonball.png")
 	if err != nil {
 		panic(err)
 	}
-	// cannonball := pixel.NewSprite(pic, pic.Bounds())
-
-        // Initialize our cannonball.
-        cball := initProjectile(
-                Altitude,
-                Angle,
-                Velocity,
-                pic)
 
 	pic2, err := loadPicture("cannon.png")
 	if err != nil {
@@ -131,27 +129,27 @@ func run() {
 
         last := time.Now() //time of the start of the previous frame
 
+        var inFlight []Projectile
 	for !win.Closed() {
 		dt := time.Since(last).Seconds()
 		last = time.Now()
 		win.Clear(colornames.Blue)
 		imd.Clear()
 
-		// Draw a cannonball sprite
-		mat := pixel.IM
-                /*
-		if (trj != nil) && (inc < len(trj)) {
-			cannonball.Draw(win, mat)
-		}
-                */
-                updateProjectile(&cball, dt*timefactor)
-                mat = mat.Scaled(pixel.ZV, 0.1)
-                //fmt.Println(cball.Trj.Position)
-                mat = mat.Moved(pixel.V(cball.Trj.Position[0], cball.Trj.Position[1]))
-                cball.Spr.Draw(win, mat)
+                // Update the projectile trajectories and draw the sprite.
+                var keepProj []Projectile
+                for i, _ := range inFlight {
+                    updateProjectile(&inFlight[i], dt*speedFactor)
+                    inFlight[i].Spr.Draw(win, inFlight[i].Mat)
+                    if inFlight[i].Trj.Position[1] > 0.0 { keepProj = append(keepProj, inFlight[i]) }
+                }
+                inFlight = nil
+                inFlight = keepProj
+                keepProj = nil
+                fmt.Println(len(inFlight))
 
 		// Draw a cannon sprite
-		mat = pixel.IM
+                mat := pixel.IM
 		mat = mat.Scaled(pixel.ZV, 0.2)
 		mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
 		cannon.Draw(win, mat)
@@ -168,28 +166,16 @@ func run() {
 		// Draw the trajectory
 		imd.Draw(win)
 		win.Update()
-		// Update the current position of the cannonball.
-                /*
-		if (trj != nil) && (inc < len(trj)) {
-			inc++
-		}
-		if (trj != nil) && (inc == len(trj)) {
-			trj = nil
-			newtrj = nil
-			inc = 0
-		}
-		if (newtrj != nil) && (trj == nil) {
-			trj = newtrj
-		}
-                */
 
 		// Accept keyboard input and calculate a new trajectory.
-
-		if win.Pressed(pixelgl.KeySpace) {
-                        /*
-			newtrj = doCalc(Altitude, Angle, Velocity)
-                        */
-
+                if win.JustPressed(pixelgl.MouseButtonLeft) {
+                    // Initialize our cannonball.
+                    cball := initProjectile(
+                            Altitude,
+                            Angle,
+                            Velocity,
+                            pic)
+                    inFlight = append(inFlight,cball)
 		}
 
 		if win.Pressed(pixelgl.KeyRight) {
@@ -211,17 +197,7 @@ func run() {
 	}
 }
 
-var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 func main() {
-    flag.Parse()
-    if *cpuprofile != "" {
-        f, err := os.Create(*cpuprofile)
-        if err != nil {
-            log.Fatal(err)
-        }
-        pprof.StartCPUProfile(f)
-        defer pprof.StopCPUProfile()
-    }
 	pixelgl.Run(run)
 }
