@@ -19,7 +19,7 @@
 package main
 
 import (
-//	"fmt"
+	"fmt"
 	"image"
 	_ "image/png"
 	"math"
@@ -33,6 +33,7 @@ import (
 	"github.com/faiface/pixel/pixelgl"
 	"golang.org/x/image/colornames"
 
+        "github.com/aquilax/go-perlin"
 )
 
 var speedFactor = 8.0 // Increasing this speeds up the trajectory display.
@@ -43,10 +44,25 @@ type Projectile struct {
 }
 
 type Target struct {
+        Pos     pixel.Vec
         Spr     *pixel.Sprite               // drawable frame of a Picture
         Mat     pixel.Matrix                // linear transformation for movement, rotation, etc.
 }
 
+const (
+	width  = 1024
+	height = 768
+	// Top of the mountain must be around the half of the screen height
+	verticalOffset = height / 2
+	// Perlin noise provides variations in values between -1 and 1,
+	// we multiply those so they're visible on screen
+	scale            = 1000
+	waveLength       = 1000
+	alpha            = 2.
+	beta             = 2.
+	n                = 3
+	maximumSeedValue = 100
+)
 
 func loadPicture(path string) (pixel.Picture, error) {
 	file, err := os.Open(path)
@@ -114,17 +130,23 @@ func initTarget(
         mat := pixel.IM
         mat = mat.Scaled(pixel.ZV, 0.2)
         mat = mat.Moved(newVec)
-        target = Target{sprite, mat}
+        target = Target{newVec, sprite, mat}
         return target
 }
 
 // UpdateTarget moves the target around in a random walk. 
-func updateTarget(tar *Target) {
+func updateTarget(tar *Target, newPos pixel.Vec) {
         // What's the change?
-        dx := rand.Float64() * 20.0 - 10.0  // -10 to +10 
-        dy := rand.Float64() * 20.0 - 10.0  // -10 to +10 
-        newVec := pixel.V(dx, dy) 
+        // dx := rand.Float64() * 20.0 - 10.0  // -10 to +10 
+        // dy := rand.Float64() * 20.0 - 10.0  // -10 to +10 
+        // newVec := pixel.V(dx, dy) 
         // Update the moved matrix.
+        dx := newPos.X - tar.Pos.X
+        dy := newPos.Y - tar.Pos.Y
+        newVec := pixel.V(dx, dy)
+        tar.Pos.X = newPos.X
+        tar.Pos.Y = newPos.Y
+        fmt.Println(tar.Pos)
         tar.Mat = tar.Mat.Moved(newVec)
 }
 
@@ -133,7 +155,7 @@ func run() {
 	// One-time initialization section
 	cfg := pixelgl.WindowConfig{
 		Title:  "Cannonball trajectory visualization.",
-		Bounds: pixel.R(0, 0, 1024, 768),
+		Bounds: pixel.R(0, 0, width, height),
 		VSync:  true,
 	}
 	win, err := pixelgl.NewWindow(cfg)
@@ -170,11 +192,19 @@ func run() {
         last := time.Now() //time of the start of the previous frame
 
         var inFlight []Projectile
+
+        // Setup Perlin noise for the path of the balloon.
+        var seed = rand.Int63n(maximumSeedValue)
+        p := perlin.NewPerlin(alpha, beta, n, seed)
+        var xpos float64 = 0.
+
+
 	for !win.Closed() {
 		dt := time.Since(last).Seconds()
 		last = time.Now()
 		win.Clear(colornames.Blue)
 		imd.Clear()
+
 
                 // Update the projectile trajectories and draw the sprite.
                 var keepProj []Projectile
@@ -195,10 +225,11 @@ func run() {
 		cannon.Draw(win, mat)
 
                 // Update and draw a target
-                updateTarget(&targ)
+                xpos++
+                if xpos > width {xpos = 0 }
+                position := pixel.V(xpos, p.Noise1D(xpos/waveLength)*scale + verticalOffset)
+                updateTarget(&targ, position)
                 targ.Spr.Draw(win, targ.Mat)
-
-                
 
 		// Draw power graph
 		launcherX := 40.0
