@@ -19,7 +19,7 @@
 package main
 
 import (
-	"fmt"
+//	"fmt"
 	"image"
 	_ "image/png"
 	"math"
@@ -52,16 +52,16 @@ type Target struct {
 const (
 	width  = 1024
 	height = 768
-	// Top of the mountain must be around the half of the screen height
-	verticalOffset = height / 2
+	// must be around the 2/3 of the screen height
+	verticalOffset = height * 2 / 3
 	// Perlin noise provides variations in values between -1 and 1,
 	// we multiply those so they're visible on screen
-	scale            = 1000
-	waveLength       = 1000
+	scale            = height/2  //adjust to taste
+	waveLength       = width/4   //adjust to taste
 	alpha            = 2.
 	beta             = 2.
 	n                = 3
-	maximumSeedValue = 100
+	maximumSeedValue = 300
 )
 
 func loadPicture(path string) (pixel.Picture, error) {
@@ -137,16 +137,11 @@ func initTarget(
 // UpdateTarget moves the target around in a random walk. 
 func updateTarget(tar *Target, newPos pixel.Vec) {
         // What's the change?
-        // dx := rand.Float64() * 20.0 - 10.0  // -10 to +10 
-        // dy := rand.Float64() * 20.0 - 10.0  // -10 to +10 
-        // newVec := pixel.V(dx, dy) 
         // Update the moved matrix.
-        dx := newPos.X - tar.Pos.X
-        dy := newPos.Y - tar.Pos.Y
-        newVec := pixel.V(dx, dy)
+        newVec := pixel.V(newPos.X-tar.Pos.X, newPos.Y-tar.Pos.Y)
         tar.Pos.X = newPos.X
         tar.Pos.Y = newPos.Y
-        fmt.Println(tar.Pos)
+        //fmt.Println(tar.Pos)
         tar.Mat = tar.Mat.Moved(newVec)
 }
 
