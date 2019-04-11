@@ -23,6 +23,7 @@ import (
 	"image"
 	_ "image/png"
 	"math"
+	"math/rand"
         "time"
 	"os"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/faiface/pixel/imdraw"
 	"github.com/faiface/pixel/pixelgl"
 	"golang.org/x/image/colornames"
+
 )
 
 var speedFactor = 8.0 // Increasing this speeds up the trajectory display.
@@ -39,6 +41,12 @@ type Projectile struct {
         Spr     *pixel.Sprite               // drawable frame of a Picture
         Mat     pixel.Matrix                // linear transformation for movement, rotation, etc.
 }
+
+type Target struct {
+        Spr     *pixel.Sprite               // drawable frame of a Picture
+        Mat     pixel.Matrix                // linear transformation for movement, rotation, etc.
+}
+
 
 func loadPicture(path string) (pixel.Picture, error) {
 	file, err := os.Open(path)
@@ -93,6 +101,33 @@ func updateProjectile(prj *Projectile, dt float64) {
         prj.Trj = newTrajectory
 }
 
+// InitTarget provides starting values for a target.
+func initTarget(
+                pic pixel.Picture,      // sprite image filename
+                newVec pixel.Vec,       // coordinate to move to
+        ) (target Target) {
+
+        //  Create the drawable sprite 
+        sprite := pixel.NewSprite(pic, pic.Bounds())
+
+        // Start with the identity matrix and scale based on the picture.
+        mat := pixel.IM
+        mat = mat.Scaled(pixel.ZV, 0.2)
+        mat = mat.Moved(newVec)
+        target = Target{sprite, mat}
+        return target
+}
+
+// UpdateTarget moves the target around in a random walk. 
+func updateTarget(tar *Target) {
+        // What's the change?
+        dx := rand.Float64() * 20.0 - 10.0  // -10 to +10 
+        dy := rand.Float64() * 20.0 - 10.0  // -10 to +10 
+        newVec := pixel.V(dx, dy) 
+        // Update the moved matrix.
+        tar.Mat = tar.Mat.Moved(newVec)
+}
+
 
 func run() {
 	// One-time initialization section
@@ -126,6 +161,12 @@ func run() {
 	}
 	cannon := pixel.NewSprite(pic2, pic2.Bounds())
 
+	pic3, err := loadPicture("haballoon.png")
+	if err != nil {
+		panic(err)
+	}
+        targ := initTarget(pic3, win.Bounds().Center())
+
         last := time.Now() //time of the start of the previous frame
 
         var inFlight []Projectile
@@ -152,6 +193,12 @@ func run() {
 		mat = mat.Scaled(pixel.ZV, 0.2)
 		mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
 		cannon.Draw(win, mat)
+
+                // Update and draw a target
+                updateTarget(&targ)
+                targ.Spr.Draw(win, targ.Mat)
+
+                
 
 		// Draw power graph
 		launcherX := 40.0
