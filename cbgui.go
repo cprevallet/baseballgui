@@ -37,12 +37,13 @@ import (
 )
 
 var speedFactor = 8.0 // Increasing this speeds up the trajectory display.
-type Projectile struct {
-        Trj      trajectory.TrajectoryPoint // what's our position, velocity, and acceleration in time
-        Spr     *pixel.Sprite               // drawable frame of a Picture
-        Mat     pixel.Matrix                // linear transformation for movement, rotation, etc.
-}
 
+// A Projectile is a sprite that has associated trajectory physics.
+type Projectile struct {
+        trj     trajectory.TrajectoryPoint // what's our position, velocity, and acceleration in time
+        rect    pixel.Rect                  // on screen position
+        spr     *pixel.Sprite               // drawable frame of a Picture
+}
 type Target struct {
         Pos     pixel.Vec
         Spr     *pixel.Sprite               // drawable frame of a Picture
@@ -77,45 +78,40 @@ func loadPicture(path string) (pixel.Picture, error) {
 	return pixel.PictureDataFromImage(img), nil
 }
 
-// InitProjectile provides starting values for a projectile.
-func initProjectile(
+// FireProjectile provides starting values for a projectile.
+func (p *Projectile) fireProjectile(
                 initialAltitude float64, // meters 
                 initialAngle float64,    // degrees from horizontal
                 initialVelocity float64, // m/s
                 pic pixel.Picture,      // sprite image filename
-        ) (projectile Projectile) {
+        ) {
 
         //  Create the initial trajectory based on the angle of the object projecting it.
         position := [2]float64{0.0, initialAltitude}
         velocity := [2]float64{initialVelocity * math.Cos(initialAngle*math.Pi/180.0),
                 initialVelocity * math.Sin(initialAngle*math.Pi/180.0)}
         acceleration := trajectory.Accel(0.0, position, velocity)
-        trj := trajectory.TrajectoryPoint{Time: 0.0, Position: position,
+        p.trj = trajectory.TrajectoryPoint{Time: 0.0, Position: position,
             Velocity: velocity, Acceleration: acceleration}
 
         //  Create the drawable sprite 
-        sprite := pixel.NewSprite(pic, pic.Bounds())
-
-        // Start with the identity matrix and scale based on the picture.
-        mat := pixel.IM
-        mat = mat.Scaled(pixel.ZV, 0.1)
-        projectile = Projectile{trj,sprite, mat}
-
-        return projectile
+        p.spr = pixel.NewSprite(pic, pic.Bounds())
+        return 
 }
 
 // UpdateProjectile computes a trajectory, performing numerical solution of a set of
 // ordinary differential equations with a fixed time step.
-func updateProjectile(prj *Projectile, dt float64) {
+func (p *Projectile) updateProjectile(dt float64) {
         // Update the matrix to move the sprite on the screen.
-        newTrajectory := trajectory.UpdateRK4(prj.Trj, dt)
+        newTrajectory := trajectory.UpdateRK4(p.trj, dt)
         // What's the change?
-        newVec := pixel.V(newTrajectory.Position[0] - prj.Trj.Position[0],
-                newTrajectory.Position[1] - prj.Trj.Position[1])
+        newVec := pixel.V(newTrajectory.Position[0] - p.trj.Position[0],
+                newTrajectory.Position[1] - p.trj.Position[1])
         // Update the moved matrix.
-        prj.Mat = prj.Mat.Moved(newVec)
-        prj.Trj = newTrajectory
+        p.trj = newTrajectory
+        p.rect = p.rect.Moved(newVec)
 }
+
 
 // InitTarget provides starting values for a target.
 func initTarget(
@@ -186,7 +182,7 @@ func run() {
 
         last := time.Now() //time of the start of the previous frame
 
-        var inFlight []Projectile
+        var inFlight []*Projectile
 
         // Setup Perlin noise for the path of the balloon.
         var seed = rand.Int63n(maximumSeedValue)
@@ -200,18 +196,21 @@ func run() {
 		win.Clear(colornames.Blue)
 		imd.Clear()
 
-
                 // Update the projectile trajectories and draw the sprite.
-                var keepProj []Projectile
+                var keepProj []*Projectile
                 for i, _ := range inFlight {
-                    updateProjectile(&inFlight[i], dt*speedFactor)
-                    inFlight[i].Spr.Draw(win, inFlight[i].Mat)
-                    if inFlight[i].Trj.Position[1] > 0.0 { keepProj = append(keepProj, inFlight[i]) }
+                    inFlight[i].updateProjectile(dt*speedFactor)
+                    inFlight[i].spr.Draw(win, pixel.IM.
+                                    Scaled(pixel.ZV, 0.1).
+                                    Moved(inFlight[i].rect.Center()),
+                    )
+                    if inFlight[i].trj.Position[1] > 0.0 { keepProj = append(keepProj, inFlight[i]) }
                 }
                 // Remove elements that have left the screen.
                 inFlight = nil
                 inFlight = keepProj
                 keepProj = nil
+
 
 		// Draw a cannon sprite
                 mat := pixel.IM
@@ -242,7 +241,8 @@ func run() {
 		// Accept keyboard input and calculate a new trajectory.
                 if win.JustPressed(pixelgl.MouseButtonLeft) {
                     // Initialize our cannonball.
-                    cball := initProjectile(
+                    cball := &Projectile{}
+                    cball.fireProjectile(
                             Altitude,
                             Angle,
                             Velocity,
