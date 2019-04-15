@@ -19,13 +19,13 @@
 package main
 
 import (
-//	"fmt"
+	//	"fmt"
 	"image"
 	_ "image/png"
 	"math"
 	"math/rand"
-        "time"
 	"os"
+	"time"
 
 	"github.com/cprevallet/baseballgui/trajectory"
 	"github.com/faiface/pixel"
@@ -33,21 +33,21 @@ import (
 	"github.com/faiface/pixel/pixelgl"
 	"golang.org/x/image/colornames"
 
-        "github.com/aquilax/go-perlin"
+	"github.com/aquilax/go-perlin"
 )
 
 var speedFactor = 8.0 // Increasing this speeds up the trajectory display.
 
 // A Projectile is a sprite that has associated trajectory physics.
 type Projectile struct {
-        trj     trajectory.TrajectoryPoint // what's our position, velocity, and acceleration in time
-        rect    pixel.Rect                  // on screen position
-        spr     *pixel.Sprite               // drawable frame of a Picture
+	trj  trajectory.TrajectoryPoint // what's our position, velocity, and acceleration in time
+	rect pixel.Rect                 // on screen position
+	spr  *pixel.Sprite              // drawable frame of a picture
 }
 type Target struct {
-        Pos     pixel.Vec
-        Spr     *pixel.Sprite               // drawable frame of a Picture
-        Mat     pixel.Matrix                // linear transformation for movement, rotation, etc.
+	//Pos     pixel.Vec
+	rect pixel.Rect    // on screen position
+	spr  *pixel.Sprite // drawable frame of a picture
 }
 
 const (
@@ -57,8 +57,8 @@ const (
 	verticalOffset = height * 2 / 3
 	// Perlin noise provides variations in values between -1 and 1,
 	// we multiply those so they're visible on screen
-	scale            = height/2  //adjust to taste
-	waveLength       = width/4   //adjust to taste
+	scale            = height / 2 //adjust to taste
+	waveLength       = width / 4  //adjust to taste
 	alpha            = 2.
 	beta             = 2.
 	n                = 3
@@ -78,69 +78,44 @@ func loadPicture(path string) (pixel.Picture, error) {
 	return pixel.PictureDataFromImage(img), nil
 }
 
-// FireProjectile provides starting values for a projectile.
+// FireProjectile provides starting values for a projectile with atmospheric drag.
 func (p *Projectile) fireProjectile(
-                initialAltitude float64, // meters 
-                initialAngle float64,    // degrees from horizontal
-                initialVelocity float64, // m/s
-                pic pixel.Picture,      // sprite image filename
-        ) {
+	initialAltitude float64, // meters
+	initialAngle float64, // degrees from horizontal
+	initialVelocity float64, // m/s
+	pic pixel.Picture, // sprite image filename
+) {
 
-        //  Create the initial trajectory based on the angle of the object projecting it.
-        position := [2]float64{0.0, initialAltitude}
-        velocity := [2]float64{initialVelocity * math.Cos(initialAngle*math.Pi/180.0),
-                initialVelocity * math.Sin(initialAngle*math.Pi/180.0)}
-        acceleration := trajectory.Accel(0.0, position, velocity)
-        p.trj = trajectory.TrajectoryPoint{Time: 0.0, Position: position,
-            Velocity: velocity, Acceleration: acceleration}
+	//  Create the initial trajectory based on the angle of the object projecting it.
+	position := [2]float64{0.0, initialAltitude}
+	velocity := [2]float64{initialVelocity * math.Cos(initialAngle*math.Pi/180.0),
+		initialVelocity * math.Sin(initialAngle*math.Pi/180.0)}
+	acceleration := trajectory.Accel(0.0, position, velocity)
+	p.trj = trajectory.TrajectoryPoint{Time: 0.0, Position: position,
+		Velocity: velocity, Acceleration: acceleration}
 
-        //  Create the drawable sprite 
-        p.spr = pixel.NewSprite(pic, pic.Bounds())
-        return 
+	//  Create the drawable sprite
+	p.spr = pixel.NewSprite(pic, pic.Bounds())
+	return
 }
 
 // UpdateProjectile computes a trajectory, performing numerical solution of a set of
 // ordinary differential equations with a fixed time step.
 func (p *Projectile) updateProjectile(dt float64) {
-        // Update the matrix to move the sprite on the screen.
-        newTrajectory := trajectory.UpdateRK4(p.trj, dt)
-        // What's the change?
-        newVec := pixel.V(newTrajectory.Position[0] - p.trj.Position[0],
-                newTrajectory.Position[1] - p.trj.Position[1])
-        // Update the moved matrix.
-        p.trj = newTrajectory
-        p.rect = p.rect.Moved(newVec)
+	// Update the matrix to move the sprite on the screen.
+	newTrajectory := trajectory.UpdateRK4(p.trj, dt)
+	// What's the change?
+	newVec := pixel.V(newTrajectory.Position[0]-p.trj.Position[0],
+		newTrajectory.Position[1]-p.trj.Position[1])
+	// Update the moved matrix.
+	p.trj = newTrajectory
+	p.rect = p.rect.Moved(newVec)
 }
 
-
-// InitTarget provides starting values for a target.
-func initTarget(
-                pic pixel.Picture,      // sprite image filename
-                newVec pixel.Vec,       // coordinate to move to
-        ) (target Target) {
-
-        //  Create the drawable sprite 
-        sprite := pixel.NewSprite(pic, pic.Bounds())
-
-        // Start with the identity matrix and scale based on the picture.
-        mat := pixel.IM
-        mat = mat.Scaled(pixel.ZV, 0.2)
-        mat = mat.Moved(newVec)
-        target = Target{newVec, sprite, mat}
-        return target
+// Moves the target to the new screen position.
+func (t *Target) updateTarget(newPos pixel.Vec) {
+	t.rect = t.rect.Moved(newPos.Sub(t.rect.Center()))
 }
-
-// UpdateTarget moves the target around in a random walk. 
-func updateTarget(tar *Target, newPos pixel.Vec) {
-        // What's the change?
-        // Update the moved matrix.
-        newVec := pixel.V(newPos.X-tar.Pos.X, newPos.Y-tar.Pos.Y)
-        tar.Pos.X = newPos.X
-        tar.Pos.Y = newPos.Y
-        //fmt.Println(tar.Pos)
-        tar.Mat = tar.Mat.Moved(newVec)
-}
-
 
 func run() {
 	// One-time initialization section
@@ -158,7 +133,7 @@ func run() {
 	// inc := 0
 
 	var Altitude float64 = 0.0 //meters
-	var Angle float64 = 40.0      // degrees from horizontal
+	var Angle float64 = 40.0   // degrees from horizontal
 	//var Velocity float64 = 35.0 // m/s
 	// this isn't historically accurate, but useful to keep it within the screen resolution
 	var Velocity float64 = 100.0 // m/s
@@ -178,17 +153,18 @@ func run() {
 	if err != nil {
 		panic(err)
 	}
-        targ := initTarget(pic3, win.Bounds().Center())
+	targ := &Target{
+		spr: pixel.NewSprite(pic3, pic3.Bounds()),
+	}
 
-        last := time.Now() //time of the start of the previous frame
+	last := time.Now() //time of the start of the previous frame
 
-        var inFlight []*Projectile
+	var inFlight []*Projectile
 
-        // Setup Perlin noise for the path of the balloon.
-        var seed = rand.Int63n(maximumSeedValue)
-        p := perlin.NewPerlin(alpha, beta, n, seed)
-        var xpos float64 = 0.
-
+	// Setup Perlin noise for the path of the balloon.
+	var seed = rand.Int63n(maximumSeedValue)
+	p := perlin.NewPerlin(alpha, beta, n, seed)
+	var xpos float64 = 0.
 
 	for !win.Closed() {
 		dt := time.Since(last).Seconds()
@@ -196,36 +172,43 @@ func run() {
 		win.Clear(colornames.Blue)
 		imd.Clear()
 
-                // Update the projectile trajectories and draw the sprite.
-                var keepProj []*Projectile
-                for i, _ := range inFlight {
-                    inFlight[i].updateProjectile(dt*speedFactor)
-                    inFlight[i].spr.Draw(win, pixel.IM.
-                                    Scaled(pixel.ZV, 0.1).
-                                    Moved(inFlight[i].rect.Center()),
-                    )
-                    if inFlight[i].trj.Position[1] > 0.0 { keepProj = append(keepProj, inFlight[i]) }
-                }
-                // Remove elements that have left the screen.
-                inFlight = nil
-                inFlight = keepProj
-                keepProj = nil
-
+		// Update the projectile trajectory physics and draw the sprite.
+		var keepProj []*Projectile
+		for i, _ := range inFlight {
+			inFlight[i].updateProjectile(dt * speedFactor)
+			inFlight[i].spr.Draw(win, pixel.IM.
+				Scaled(pixel.ZV, 0.1).
+				Moved(inFlight[i].rect.Center()),
+			)
+			if inFlight[i].trj.Position[1] > 0.0 {
+				keepProj = append(keepProj, inFlight[i])
+			}
+		}
+		// Remove elements that have left the screen.
+		inFlight = nil
+		inFlight = keepProj
+		keepProj = nil
 
 		// Draw a cannon sprite
-                mat := pixel.IM
+		mat := pixel.IM
 		mat = mat.Scaled(pixel.ZV, 0.2)
 		mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
 		cannon.Draw(win, mat)
+		mat = mat.Scaled(pixel.ZV, 0.2)
 
-                // Update and draw a target
-                xpos++
-                if xpos > width {xpos = 0 }
-                position := pixel.V(xpos, p.Noise1D(xpos/waveLength)*scale + verticalOffset)
-                updateTarget(&targ, position)
-                targ.Spr.Draw(win, targ.Mat)
+		// Update and draw a target using Perlin noise.
+		xpos++
+		if xpos > width {
+			xpos = 0
+		}
+		position := pixel.V(xpos, p.Noise1D(xpos/waveLength)*scale+verticalOffset)
+		targ.updateTarget(position)
+		targ.spr.Draw(win, pixel.IM.
+			Scaled(pixel.ZV, 0.2).
+			Moved(targ.rect.Center()),
+		)
 
-		// Draw power graph
+		// Draw power graph above the cannon.
 		launcherX := 40.0
 		launcherY := 40.0
 		power := Velocity / 5.0
@@ -234,20 +217,21 @@ func run() {
 		imd.Push(pixel.V(launcherX+offset, launcherY+offset))
 		imd.Push(pixel.V(launcherX+offset+power, launcherY+offset))
 		imd.Line(1.0)
-		// Draw the trajectory
 		imd.Draw(win)
+
+		// Display
 		win.Update()
 
 		// Accept keyboard input and calculate a new trajectory.
-                if win.JustPressed(pixelgl.MouseButtonLeft) {
-                    // Initialize our cannonball.
-                    cball := &Projectile{}
-                    cball.fireProjectile(
-                            Altitude,
-                            Angle,
-                            Velocity,
-                            pic)
-                    inFlight = append(inFlight,cball)
+		if win.JustPressed(pixelgl.MouseButtonLeft) {
+			// Fire a new cannonball.
+			cball := &Projectile{}
+			cball.fireProjectile(
+				Altitude,
+				Angle,
+				Velocity,
+				pic)
+			inFlight = append(inFlight, cball)
 		}
 
 		if win.Pressed(pixelgl.KeyRight) {
@@ -268,7 +252,6 @@ func run() {
 
 	}
 }
-
 
 func main() {
 	pixelgl.Run(run)
