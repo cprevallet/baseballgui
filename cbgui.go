@@ -99,9 +99,9 @@ func (p *Projectile) fireProjectile(
 	return
 }
 
-// UpdateProjectile computes a trajectory, performing numerical solution of a set of
+// UpdateTrajectory computes a trajectory, performing numerical solution of a set of
 // ordinary differential equations with a fixed time step.
-func (p *Projectile) updateProjectile(dt float64) {
+func (p *Projectile) updateTrajectory(dt float64) {
 	// Update the matrix to move the sprite on the screen.
 	newTrajectory := trajectory.UpdateRK4(p.trj, dt)
 	// What's the change?
@@ -175,7 +175,7 @@ func run() {
 		// Update the projectile trajectory physics and draw the sprite.
 		var keepProj []*Projectile
 		for i, _ := range inFlight {
-			inFlight[i].updateProjectile(dt * speedFactor)
+			inFlight[i].updateTrajectory(dt * speedFactor)
 			inFlight[i].spr.Draw(win, pixel.IM.
 				Scaled(pixel.ZV, 0.1).
 				Moved(inFlight[i].rect.Center()),
@@ -194,6 +194,7 @@ func run() {
 		mat = mat.Scaled(pixel.ZV, 0.2)
 		mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
 		cannon.Draw(win, mat)
+                // need this to insure cannonballs don't shoot out the side???
 		mat = mat.Scaled(pixel.ZV, 0.2)
 
 		// Update and draw a target using Perlin noise.
