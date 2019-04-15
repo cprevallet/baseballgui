@@ -19,7 +19,7 @@
 package main
 
 import (
-	//	"fmt"
+	"fmt"
 	"image"
 	_ "image/png"
 	"math"
@@ -96,25 +96,40 @@ func (p *Projectile) fireProjectile(
 
 	//  Create the drawable sprite
 	p.spr = pixel.NewSprite(pic, pic.Bounds())
+        p.rect = pixel.R(-1, -1, 1, 1)
 	return
 }
 
 // UpdateTrajectory computes a trajectory, performing numerical solution of a set of
 // ordinary differential equations with a fixed time step.
 func (p *Projectile) updateTrajectory(dt float64) {
-	// Update the matrix to move the sprite on the screen.
+	// Update the trajectory.
 	newTrajectory := trajectory.UpdateRK4(p.trj, dt)
-	// What's the change?
+	// What's the change in position?
 	newVec := pixel.V(newTrajectory.Position[0]-p.trj.Position[0],
 		newTrajectory.Position[1]-p.trj.Position[1])
-	// Update the moved matrix.
 	p.trj = newTrajectory
+	// Update the rectangle so the sprite can redraw itself at
+        // the new screen position.
 	p.rect = p.rect.Moved(newVec)
 }
 
-// Moves the target to the new screen position.
+// UpdateTarget moves the target to the new screen position.
 func (t *Target) updateTarget(newPos pixel.Vec) {
 	t.rect = t.rect.Moved(newPos.Sub(t.rect.Center()))
+}
+
+// Detect collision checks if a projectile has hit by rectangle positions.
+func (t *Target) detectCollision(p []*Projectile) {
+        //Intersect function requires normalized values
+        tNormed := t.rect.Norm()
+        fmt.Println("...")
+        for _, prj:= range p {
+                 pNormed := prj.rect.Norm()
+                if tNormed.Intersect(pNormed) != pixel.R(0,0,0,0) {
+                    fmt.Println("Hit!!!")
+                }
+        }
 }
 
 func run() {
@@ -130,7 +145,6 @@ func run() {
 	}
 
 	imd := imdraw.New(nil)
-	// inc := 0
 
 	var Altitude float64 = 0.0 //meters
 	var Angle float64 = 40.0   // degrees from horizontal
@@ -155,6 +169,13 @@ func run() {
 	}
 	targ := &Target{
 		spr: pixel.NewSprite(pic3, pic3.Bounds()),
+                //Custom - these values need to be based on the bounds of the picture * scaling applied.
+                rect: pixel.R(-25, -30, 25, 30,
+                              //-pic3.Bounds().W()/2,
+                              //-pic3.Bounds().H()/2, 
+                              //pic3.Bounds().W()/2, 
+                              //pic3.Bounds().H()/2, 
+                              ),
 	}
 
 	last := time.Now() //time of the start of the previous frame
@@ -208,6 +229,9 @@ func run() {
 			Scaled(pixel.ZV, 0.2).
 			Moved(targ.rect.Center()),
 		)
+
+                // Did the projectile reach a target?
+                targ.detectCollision(inFlight)
 
 		// Draw power graph above the cannon.
 		launcherX := 40.0
