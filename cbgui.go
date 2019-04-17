@@ -37,6 +37,8 @@ import (
 )
 
 var speedFactor = 8.0 // Increasing this speeds up the trajectory display.
+var xPctofScreen = 15.0  //what pct of the x-axis of the screen should the target use?
+var yPctofScreen = 15.0  //what pct of the y-axis of the screen should the target use?
 
 // A Projectile is a sprite that has associated trajectory physics.
 type Projectile struct {
@@ -167,16 +169,14 @@ func run() {
 	if err != nil {
 		panic(err)
 	}
+
+        xPixels := xPctofScreen/100.0 * pic3.Bounds().W()
+        yPixels := yPctofScreen/100.0 * pic3.Bounds().H()
 	targ := &Target{
 		spr: pixel.NewSprite(pic3, pic3.Bounds()),
-                //Custom - these values need to be based on the bounds of the picture * scaling applied.
-                rect: pixel.R(-25, -30, 25, 30,
-                              //-pic3.Bounds().W()/2,
-                              //-pic3.Bounds().H()/2, 
-                              //pic3.Bounds().W()/2, 
-                              //pic3.Bounds().H()/2, 
-                              ),
+                rect:pixel.R(-xPixels/2,-yPixels/2, xPixels/2, yPixels/2),
 	}
+        fmt.Println(targ.spr.Frame().W())
 
 	last := time.Now() //time of the start of the previous frame
 
@@ -226,7 +226,7 @@ func run() {
 		position := pixel.V(xpos, p.Noise1D(xpos/waveLength)*scale+verticalOffset)
 		targ.updateTarget(position)
 		targ.spr.Draw(win, pixel.IM.
-			Scaled(pixel.ZV, 0.2).
+			ScaledXY(pixel.ZV, pixel.V(xPctofScreen/100.0, yPctofScreen/100.0)).
 			Moved(targ.rect.Center()),
 		)
 
