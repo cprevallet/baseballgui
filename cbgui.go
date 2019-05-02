@@ -16,10 +16,13 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+//TODO Add sounds for firing and hits.
+//TODO Add scoring.
+
 package main
 
 import (
-//	"fmt"
+	"fmt"
 	"image"
 	_ "image/png"
 	"math"
@@ -36,7 +39,7 @@ import (
 	"github.com/aquilax/go-perlin"
 )
 
-var speedFactor = 8.0   // Increasing this speeds up the trajectory display.
+var speedFactor = 9.8   // Display of traj.  Can be used to simulate different gravitational constants.
 var xPctofScreen = 15.0 //what pct of the horizontal scale of the screen should the target use?
 var yPctofScreen = 15.0 //what pct of the vertical scale of the screen should the target use?
 
@@ -63,13 +66,10 @@ const (
 	// Perlin noise provides variations in values between -1 and 1,
 	// we multiply those so they're visible on screen
 	scale            = height / 2 //adjust to taste
-	waveLength       = width / 4  //adjust to taste
 	alpha            = 2.
 	beta             = 2.
 	n                = 3
 	maximumSeedValue = 300
-        // inc = update perlin, controls speed of target
-        inc = 6.0
 )
 
 func loadPicture(path string) (pixel.Picture, error) {
@@ -104,7 +104,7 @@ func (p *Projectile) fireProjectile(
 	//  Create the drawable sprite
 	p.spr = pixel.NewSprite(pic, pic.Bounds())
 	p.rect = pixel.R(-1, -1, 1, 1)
-        return
+	return
 }
 
 // UpdateTrajectory computes a trajectory, performing numerical solution of a set of
@@ -128,7 +128,7 @@ func (t *Target) updateTarget(newPos pixel.Vec) {
 
 // Detect collision checks if a projectile has hit by rectangle positions.
 func (t *Target) detectCollision(p []*Projectile) (hit bool) {
-        hit = false
+	hit = false
 	//Intersect function requires normalized values
 	tNormed := t.rect.Norm()
 	//fmt.Println("...")
@@ -136,10 +136,10 @@ func (t *Target) detectCollision(p []*Projectile) (hit bool) {
 		pNormed := prj.rect.Norm()
 		if tNormed.Intersect(pNormed) != pixel.R(0, 0, 0, 0) {
 			//fmt.Println("Hit!!!")
-                        hit = true
+			hit = true
 		}
 	}
-        return hit
+	return hit
 }
 
 func run() {
@@ -160,7 +160,13 @@ func run() {
 	var Angle float64 = 90.0   // degrees from horizontal
 	//var Velocity float64 = 35.0 // m/s
 	// this isn't historically accurate, but useful to keep it within the screen resolution
-	var Velocity float64 = 90.0 // m/s
+	var Velocity float64 = 100.0 // m/s
+	var Projs []*Projectile      // a list of inflight projectiles
+	var Targs []*Target          // a list of onscreen targets
+	var p *perlin.Perlin         // path of target
+	var inc float64 = 1.0        // speed increment through perlin array
+	var period float64 = 4.0     //used to determine the perlin wavelength
+        var newdir, forward bool
 
 	pic, err := loadPicture("cannonball.png")
 	if err != nil {
@@ -180,14 +186,9 @@ func run() {
 
 	last := time.Now() //time of the start of the previous frame
 
-	var Projs []*Projectile // a list of inflight projectiles
-	var Targs []*Target     // a list of onscreen targets
-
-	// Setup Perlin noise for the path of the balloon.
-	var seed = rand.Int63n(maximumSeedValue)
-	p := perlin.NewPerlin(alpha, beta, n, seed)
-
 	for !win.Closed() {
+
+                if Velocity < 110.0 {Velocity += 0.05}
 		dt := time.Since(last).Seconds()
 		last = time.Now()
 		win.Clear(colornames.Blue)
@@ -199,7 +200,7 @@ func run() {
 			Projs[i].updateTrajectory(dt * speedFactor)
 			Projs[i].spr.Draw(win, pixel.IM.
 				Scaled(pixel.ZV, 0.1).
-                                Moved(pixel.V(width/2,0)).
+				Moved(pixel.V(width/2, 0)).
 				Moved(Projs[i].rect.Center()),
 			)
 			if Projs[i].trj.Position[1] > 0.0 {
@@ -213,39 +214,78 @@ func run() {
 
 		// Draw a cannon sprite
 		cannon.Draw(win, pixel.IM.
-		        Scaled(pixel.ZV, 0.2).
-        		Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0).
-                        Moved(pixel.V(width/2, 0)),
-                        )
+			Scaled(pixel.ZV, 0.2).
+			Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0).
+			Moved(pixel.V(width/2, 0)),
+		)
 
 		// Create targets to shoot at.
+                //TODO  Need cleaner way to handle initializing w/ positive and negative?
 		if Targs == nil {
 			xPixels := xPctofScreen / 100.0 * pic3.Bounds().W()
 			yPixels := yPctofScreen / 100.0 * pic3.Bounds().H()
-			targ := &Target{
+		        forward = rand.Float64() > 0.5
+                        var targ *Target
+                        if forward {
+			targ = &Target{
 				spr:     pixel.NewSprite(pic3, pic3.Bounds()),
 				rect:    pixel.R(-xPixels/2, -yPixels/2, xPixels/2, yPixels/2),
-				perlinx: -width/2,
+				perlinx: -width / 2,
 			}
+                        } else {
+			targ = &Target{
+				spr:     pixel.NewSprite(pic3, pic3.Bounds()),
+				rect:    pixel.R(-xPixels/2, -yPixels/2, xPixels/2, yPixels/2),
+				perlinx: width / 2,
+			}
+                        }
 			Targs = append(Targs, targ)
+			// Setup Perlin noise for the path of the balloon.
+			p = perlin.NewPerlin(alpha, beta, n, rand.Int63n(maximumSeedValue))
+			inc = rand.Float64()*4.0 + 1.0    // zero to five
+			period = rand.Float64()*3.0 + 2.0 // two to five
 		}
 
 		// Draw a target with motion using Perlin noise. Check for collisions.
 		var keepTarg []*Target
+                //TODO  Clean-up repeating code.  Better method for random boolean?
 		for _, targ := range Targs {
-			targ.perlinx+= inc
-			if targ.perlinx > width/2 {
-				targ.perlinx = -width/2
+			//fmt.Println(inc)
+			if forward {
+				targ.perlinx += inc
+				if targ.perlinx > width/2 {
+					targ.perlinx = -width / 2
+					// Randomize the path,speed on each pass.
+					p = perlin.NewPerlin(alpha, beta, n, rand.Int63n(maximumSeedValue))
+					inc = rand.Float64()*4.0 + 1.0    // zero to five
+					period = rand.Float64()*4.0 + 1.0 // zero to five
+					newdir = rand.Float64() > 0.5
+				}
+			} else {
+				targ.perlinx -= inc
+				if targ.perlinx < -width/2 {
+					targ.perlinx = width / 2
+					// Randomize the path on each pass.
+					p = perlin.NewPerlin(alpha, beta, n, rand.Int63n(maximumSeedValue))
+					inc = rand.Float64()*4.0 + 1.0    // zero to five
+					period = rand.Float64()*4.0 + 1.0 // zero to five
+					newdir = rand.Float64() < 0.5
+				}
 			}
+                        forward = newdir
+
+			waveLength := width / period 
 			position := pixel.V(targ.perlinx, p.Noise1D(targ.perlinx/waveLength)*scale+verticalOffset)
 			targ.updateTarget(position)
 			targ.spr.Draw(win, pixel.IM.
 				ScaledXY(pixel.ZV, pixel.V(xPctofScreen/100.0, yPctofScreen/100.0)).
-                                Moved(pixel.V(width/2,0)).
+				Moved(pixel.V(width/2, 0)).
 				Moved(targ.rect.Center()),
 			)
 			hit := targ.detectCollision(Projs)
-                        if hit == false {keepTarg = append(keepTarg, targ)}
+			if hit == false {
+				keepTarg = append(keepTarg, targ)
+			}
 		}
 		// Remove elements that have been hit.
 		Targs = nil
@@ -253,17 +293,23 @@ func run() {
 		keepTarg = nil
 
 		// Draw power graph above the cannon.
-		launcherX := 40.0
-		launcherY := 40.0
-		power := Velocity / 5.0
-		imd.Color = colornames.Red
+		launcherX := width / 2.0
+		launcherY := 0.95 * height
+		//power := Velocity / 5.0
+                if Velocity < 95 {
+                    imd.Color = colornames.Red
+                } else {
+		    imd.Color = colornames.Green
+                }
+
 		offset := 10.0
 		imd.Push(pixel.V(launcherX+offset, launcherY+offset))
-		imd.Push(pixel.V(launcherX+offset+power, launcherY+offset))
-		imd.Line(1.0)
+		imd.Push(pixel.V(launcherX+offset+Velocity-85, launcherY+offset))
+		imd.Line(5.0)
 		imd.Draw(win)
 
 		// Display
+                fmt.Println(Velocity)
 		win.Update()
 
 		// Accept keyboard input and calculate a new trajectory.
@@ -276,16 +322,18 @@ func run() {
 				Velocity,
 				pic)
 			Projs = append(Projs, cball)
+                        //TODO Make constants for velocity increment and angle limits. 
+                        Velocity -= 2.0
 		}
 
-		if win.Pressed(pixelgl.KeyRight) {
+		if win.Pressed(pixelgl.KeyRight) && (Angle > 70.0) {
 			Angle -= 1.0
 		}
 
-		if win.Pressed(pixelgl.KeyLeft) {
+		if win.Pressed(pixelgl.KeyLeft) && (Angle < 110.0) {
 			Angle += 1.0
 		}
-
+/*
 		if win.Pressed(pixelgl.KeyUp) {
 			Velocity += 1.0
 		}
@@ -293,7 +341,7 @@ func run() {
 		if win.Pressed(pixelgl.KeyDown) {
 			Velocity -= 1.0
 		}
-
+*/
 	}
 }
 
