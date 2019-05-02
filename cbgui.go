@@ -36,9 +36,9 @@ import (
 	"github.com/aquilax/go-perlin"
 )
 
-var speedFactor = 8.0 // Increasing this speeds up the trajectory display.
-var xPctofScreen = 15.0  //what pct of the x-axis of the screen should the target use?
-var yPctofScreen = 15.0  //what pct of the y-axis of the screen should the target use?
+var speedFactor = 8.0   // Increasing this speeds up the trajectory display.
+var xPctofScreen = 15.0 //what pct of the horizontal scale of the screen should the target use?
+var yPctofScreen = 15.0 //what pct of the vertical scale of the screen should the target use?
 
 // A Projectile is a sprite that has associated trajectory physics.
 type Projectile struct {
@@ -46,10 +46,13 @@ type Projectile struct {
 	rect pixel.Rect                 // on screen position
 	spr  *pixel.Sprite              // drawable frame of a picture
 }
+
+// A Target is a sprite that has associated perlin-based physics.
 type Target struct {
 	//Pos     pixel.Vec
-	rect pixel.Rect    // on screen position
-	spr  *pixel.Sprite // drawable frame of a picture
+	perlinx float64       // perlin horizontal coordinate index
+	rect    pixel.Rect    // on screen position
+	spr     *pixel.Sprite // drawable frame of a picture
 }
 
 const (
@@ -98,7 +101,7 @@ func (p *Projectile) fireProjectile(
 
 	//  Create the drawable sprite
 	p.spr = pixel.NewSprite(pic, pic.Bounds())
-        p.rect = pixel.R(-1, -1, 1, 1)
+	p.rect = pixel.R(-1, -1, 1, 1)
 	return
 }
 
@@ -112,7 +115,7 @@ func (p *Projectile) updateTrajectory(dt float64) {
 		newTrajectory.Position[1]-p.trj.Position[1])
 	p.trj = newTrajectory
 	// Update the rectangle so the sprite can redraw itself at
-        // the new screen position.
+	// the new screen position.
 	p.rect = p.rect.Moved(newVec)
 }
 
@@ -123,15 +126,15 @@ func (t *Target) updateTarget(newPos pixel.Vec) {
 
 // Detect collision checks if a projectile has hit by rectangle positions.
 func (t *Target) detectCollision(p []*Projectile) {
-        //Intersect function requires normalized values
-        tNormed := t.rect.Norm()
-        fmt.Println("...")
-        for _, prj:= range p {
-                 pNormed := prj.rect.Norm()
-                if tNormed.Intersect(pNormed) != pixel.R(0,0,0,0) {
-                    fmt.Println("Hit!!!")
-                }
-        }
+	//Intersect function requires normalized values
+	tNormed := t.rect.Norm()
+	fmt.Println("...")
+	for _, prj := range p {
+		pNormed := prj.rect.Norm()
+		if tNormed.Intersect(pNormed) != pixel.R(0, 0, 0, 0) {
+			fmt.Println("Hit!!!")
+		}
+	}
 }
 
 func run() {
@@ -170,22 +173,14 @@ func run() {
 		panic(err)
 	}
 
-        xPixels := xPctofScreen/100.0 * pic3.Bounds().W()
-        yPixels := yPctofScreen/100.0 * pic3.Bounds().H()
-	targ := &Target{
-		spr: pixel.NewSprite(pic3, pic3.Bounds()),
-                rect:pixel.R(-xPixels/2,-yPixels/2, xPixels/2, yPixels/2),
-	}
-        fmt.Println(targ.spr.Frame().W())
-
 	last := time.Now() //time of the start of the previous frame
 
-	var inFlight []*Projectile
+	var Projs []*Projectile // a list of inflight projectiles
+	var Targs []*Target     // a list of onscreen targets
 
 	// Setup Perlin noise for the path of the balloon.
 	var seed = rand.Int63n(maximumSeedValue)
 	p := perlin.NewPerlin(alpha, beta, n, seed)
-	var xpos float64 = 0.
 
 	for !win.Closed() {
 		dt := time.Since(last).Seconds()
@@ -195,43 +190,55 @@ func run() {
 
 		// Update the projectile trajectory physics and draw the sprite.
 		var keepProj []*Projectile
-		for i, _ := range inFlight {
-			inFlight[i].updateTrajectory(dt * speedFactor)
-			inFlight[i].spr.Draw(win, pixel.IM.
+		for i, _ := range Projs {
+			Projs[i].updateTrajectory(dt * speedFactor)
+			Projs[i].spr.Draw(win, pixel.IM.
 				Scaled(pixel.ZV, 0.1).
-				Moved(inFlight[i].rect.Center()),
+				Moved(Projs[i].rect.Center()),
 			)
-			if inFlight[i].trj.Position[1] > 0.0 {
-				keepProj = append(keepProj, inFlight[i])
+			if Projs[i].trj.Position[1] > 0.0 {
+				keepProj = append(keepProj, Projs[i])
 			}
 		}
 		// Remove elements that have left the screen.
-		inFlight = nil
-		inFlight = keepProj
+		Projs = nil
+		Projs = keepProj
 		keepProj = nil
+
+		// Create something to shoot at.
+		if Targs == nil {
+			xPixels := xPctofScreen / 100.0 * pic3.Bounds().W()
+			yPixels := yPctofScreen / 100.0 * pic3.Bounds().H()
+			targ := &Target{
+				spr:     pixel.NewSprite(pic3, pic3.Bounds()),
+				rect:    pixel.R(-xPixels/2, -yPixels/2, xPixels/2, yPixels/2),
+				perlinx: 0,
+			}
+			Targs = append(Targs, targ)
+		}
 
 		// Draw a cannon sprite
 		mat := pixel.IM
 		mat = mat.Scaled(pixel.ZV, 0.2)
 		mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
 		cannon.Draw(win, mat)
-                // need this to insure cannonballs don't shoot out the side???
+		// need this to insure cannonballs don't shoot out the side???
 		mat = mat.Scaled(pixel.ZV, 0.2)
 
-		// Update and draw a target using Perlin noise.
-		xpos++
-		if xpos > width {
-			xpos = 0
+		// Draw a target with motion using Perlin noise. Check for collisions.
+		for _, targ := range Targs {
+			targ.perlinx++
+			if targ.perlinx > width {
+				targ.perlinx = 0
+			}
+			position := pixel.V(targ.perlinx, p.Noise1D(targ.perlinx/waveLength)*scale+verticalOffset)
+			targ.updateTarget(position)
+			targ.spr.Draw(win, pixel.IM.
+				ScaledXY(pixel.ZV, pixel.V(xPctofScreen/100.0, yPctofScreen/100.0)).
+				Moved(targ.rect.Center()),
+			)
+			targ.detectCollision(Projs)
 		}
-		position := pixel.V(xpos, p.Noise1D(xpos/waveLength)*scale+verticalOffset)
-		targ.updateTarget(position)
-		targ.spr.Draw(win, pixel.IM.
-			ScaledXY(pixel.ZV, pixel.V(xPctofScreen/100.0, yPctofScreen/100.0)).
-			Moved(targ.rect.Center()),
-		)
-
-                // Did the projectile reach a target?
-                targ.detectCollision(inFlight)
 
 		// Draw power graph above the cannon.
 		launcherX := 40.0
@@ -256,7 +263,7 @@ func run() {
 				Angle,
 				Velocity,
 				pic)
-			inFlight = append(inFlight, cball)
+			Projs = append(Projs, cball)
 		}
 
 		if win.Pressed(pixelgl.KeyRight) {
