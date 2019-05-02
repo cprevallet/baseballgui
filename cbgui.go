@@ -68,7 +68,7 @@ const (
 	beta             = 2.
 	n                = 3
 	maximumSeedValue = 300
-        // inc = update perlin
+        // inc = update perlin, controls speed of target
         inc = 6.0
 )
 
@@ -212,13 +212,11 @@ func run() {
 		keepProj = nil
 
 		// Draw a cannon sprite
-		mat := pixel.IM
-		mat = mat.Scaled(pixel.ZV, 0.2)
-		mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
-                mat = mat.Moved(pixel.V(width/2, 0))
-		cannon.Draw(win, mat)
-		// need this to insure cannonballs don't shoot out the side???
-		mat = mat.Scaled(pixel.ZV, 0.2)
+		cannon.Draw(win, pixel.IM.
+		        Scaled(pixel.ZV, 0.2).
+        		Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0).
+                        Moved(pixel.V(width/2, 0)),
+                        )
 
 		// Create targets to shoot at.
 		if Targs == nil {
@@ -281,19 +279,19 @@ func run() {
 		}
 
 		if win.Pressed(pixelgl.KeyRight) {
-			Velocity += 1.0
+			Angle -= 1.0
 		}
 
 		if win.Pressed(pixelgl.KeyLeft) {
-			Velocity -= 1.0
-		}
-
-		if win.Pressed(pixelgl.KeyUp) {
 			Angle += 1.0
 		}
 
+		if win.Pressed(pixelgl.KeyUp) {
+			Velocity += 1.0
+		}
+
 		if win.Pressed(pixelgl.KeyDown) {
-			Angle -= 1.0
+			Velocity -= 1.0
 		}
 
 	}
