@@ -19,7 +19,7 @@
 package main
 
 import (
-	"fmt"
+//	"fmt"
 	"image"
 	_ "image/png"
 	"math"
@@ -50,7 +50,7 @@ type Projectile struct {
 // A Target is a sprite that has associated perlin-based physics.
 type Target struct {
 	//Pos     pixel.Vec
-	perlinx float64       // perlin horizontal coordinate index
+	perlinx float64       // perlin horizontal coordinate index, left = -width/2, right = width/2
 	rect    pixel.Rect    // on screen position
 	spr     *pixel.Sprite // drawable frame of a picture
 }
@@ -68,6 +68,8 @@ const (
 	beta             = 2.
 	n                = 3
 	maximumSeedValue = 300
+        // inc = update perlin
+        inc = 6.0
 )
 
 func loadPicture(path string) (pixel.Picture, error) {
@@ -102,7 +104,7 @@ func (p *Projectile) fireProjectile(
 	//  Create the drawable sprite
 	p.spr = pixel.NewSprite(pic, pic.Bounds())
 	p.rect = pixel.R(-1, -1, 1, 1)
-	return
+        return
 }
 
 // UpdateTrajectory computes a trajectory, performing numerical solution of a set of
@@ -125,16 +127,19 @@ func (t *Target) updateTarget(newPos pixel.Vec) {
 }
 
 // Detect collision checks if a projectile has hit by rectangle positions.
-func (t *Target) detectCollision(p []*Projectile) {
+func (t *Target) detectCollision(p []*Projectile) (hit bool) {
+        hit = false
 	//Intersect function requires normalized values
 	tNormed := t.rect.Norm()
-	fmt.Println("...")
+	//fmt.Println("...")
 	for _, prj := range p {
 		pNormed := prj.rect.Norm()
 		if tNormed.Intersect(pNormed) != pixel.R(0, 0, 0, 0) {
-			fmt.Println("Hit!!!")
+			//fmt.Println("Hit!!!")
+                        hit = true
 		}
 	}
+        return hit
 }
 
 func run() {
@@ -152,10 +157,10 @@ func run() {
 	imd := imdraw.New(nil)
 
 	var Altitude float64 = 0.0 //meters
-	var Angle float64 = 40.0   // degrees from horizontal
+	var Angle float64 = 90.0   // degrees from horizontal
 	//var Velocity float64 = 35.0 // m/s
 	// this isn't historically accurate, but useful to keep it within the screen resolution
-	var Velocity float64 = 100.0 // m/s
+	var Velocity float64 = 90.0 // m/s
 
 	pic, err := loadPicture("cannonball.png")
 	if err != nil {
@@ -194,6 +199,7 @@ func run() {
 			Projs[i].updateTrajectory(dt * speedFactor)
 			Projs[i].spr.Draw(win, pixel.IM.
 				Scaled(pixel.ZV, 0.1).
+                                Moved(pixel.V(width/2,0)).
 				Moved(Projs[i].rect.Center()),
 			)
 			if Projs[i].trj.Position[1] > 0.0 {
@@ -205,40 +211,48 @@ func run() {
 		Projs = keepProj
 		keepProj = nil
 
-		// Create something to shoot at.
+		// Draw a cannon sprite
+		mat := pixel.IM
+		mat = mat.Scaled(pixel.ZV, 0.2)
+		mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
+                mat = mat.Moved(pixel.V(width/2, 0))
+		cannon.Draw(win, mat)
+		// need this to insure cannonballs don't shoot out the side???
+		mat = mat.Scaled(pixel.ZV, 0.2)
+
+		// Create targets to shoot at.
 		if Targs == nil {
 			xPixels := xPctofScreen / 100.0 * pic3.Bounds().W()
 			yPixels := yPctofScreen / 100.0 * pic3.Bounds().H()
 			targ := &Target{
 				spr:     pixel.NewSprite(pic3, pic3.Bounds()),
 				rect:    pixel.R(-xPixels/2, -yPixels/2, xPixels/2, yPixels/2),
-				perlinx: 0,
+				perlinx: -width/2,
 			}
 			Targs = append(Targs, targ)
 		}
 
-		// Draw a cannon sprite
-		mat := pixel.IM
-		mat = mat.Scaled(pixel.ZV, 0.2)
-		mat = mat.Rotated(pixel.ZV, (Angle-35.0)*math.Pi/180.0)
-		cannon.Draw(win, mat)
-		// need this to insure cannonballs don't shoot out the side???
-		mat = mat.Scaled(pixel.ZV, 0.2)
-
 		// Draw a target with motion using Perlin noise. Check for collisions.
+		var keepTarg []*Target
 		for _, targ := range Targs {
-			targ.perlinx++
-			if targ.perlinx > width {
-				targ.perlinx = 0
+			targ.perlinx+= inc
+			if targ.perlinx > width/2 {
+				targ.perlinx = -width/2
 			}
 			position := pixel.V(targ.perlinx, p.Noise1D(targ.perlinx/waveLength)*scale+verticalOffset)
 			targ.updateTarget(position)
 			targ.spr.Draw(win, pixel.IM.
 				ScaledXY(pixel.ZV, pixel.V(xPctofScreen/100.0, yPctofScreen/100.0)).
+                                Moved(pixel.V(width/2,0)).
 				Moved(targ.rect.Center()),
 			)
-			targ.detectCollision(Projs)
+			hit := targ.detectCollision(Projs)
+                        if hit == false {keepTarg = append(keepTarg, targ)}
 		}
+		// Remove elements that have been hit.
+		Targs = nil
+		Targs = keepTarg
+		keepTarg = nil
 
 		// Draw power graph above the cannon.
 		launcherX := 40.0
